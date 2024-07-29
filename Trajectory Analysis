@@ -1,0 +1,109 @@
+!pip install opencv-python opencv-python-headless numpy tensorflow tensorflow-hub
+
+import cv2
+import numpy as np
+import tensorflow_hub as hub
+import time
+
+import tensorflow_hub as hub
+
+# Load the model
+model_url = "https://tfhub.dev/tensorflow/ssd_mobilenet_v2/2"
+model = hub.load(model_url)
+
+category_index = {1: "person", 18: "dog"}  # Class IDs from COCO dataset for "person" and "dog"
+
+def preprocess_video(video_path):
+    cap = cv2.VideoCapture(video_path)
+    frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    frames = []
+    success, frame = cap.read()
+
+    while success:
+        frames.append(frame)
+        success, frame = cap.read()
+
+    cap.release()
+    return frames, frame_width, frame_height, fps
+
+def detect_objects(image):
+    image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    image_tensor = np.expand_dims(image_rgb, axis=0)
+
+    # Run the model
+    results = model(image_tensor)
+
+    # Extract results
+    boxes = results["detection_boxes"].numpy()[0]
+    classes = results["detection_classes"].numpy()[0].astype(np.int32)
+    scores = results["detection_scores"].numpy()[0]
+
+    return boxes, classes, scores
+
+def analyze_interaction(classes, scores):
+    dog_present = False
+    human_present = False
+    for class_id, score in zip(classes, scores):
+        if score > 0.5:
+            if class_id == 18:  # Dog class ID in COCO dataset
+                dog_present = True
+            if class_id == 1:  # Person class ID in COCO dataset
+                human_present = True
+    return dog_present, human_present
+
+def visualize_detection(image, boxes, classes, scores, category_index, threshold=0.5):
+    height, width, _ = image.shape
+    for i in range(len(scores)):
+        if scores[i] > threshold:
+            box = boxes[i]
+            class_name = category_index.get(classes[i], "Unknown")
+            y_min, x_min, y_max, x_max = box
+            y_min = int(y_min * height)
+            x_min = int(x_min * width)
+            y_max = int(y_max * height)
+            x_max = int(x_max * width)
+            # Draw bounding box and label on the image
+            image = cv2.rectangle(image, (x_min, y_min), (x_max, y_max), (255, 0, 0), 2)
+            image = cv2.putText(image, class_name, (x_min, y_min - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2)
+    return image
+
+def track_and_classify(frames, output_video_name, frame_width, frame_height, fps, T=10):
+    start_time = time.time()
+    dog_found_time = None
+
+    # Initialize video writer
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    out = cv2.VideoWriter(output_video_name, fourcc, fps, (frame_width, frame_height))
+
+    for frame in frames:
+        boxes, classes, scores = detect_objects(frame)
+        dog_present, human_present = analyze_interaction(classes, scores)
+
+        frame = visualize_detection(frame, boxes, classes, scores, category_index)
+        out.write(frame)
+
+        if dog_present:
+            if human_present:
+                dog_found_time = None
+                out.release()
+                return "Not Abandoned"
+            elif dog_found_time is None:
+                dog_found_time = time.time()
+
+        if dog_found_time and (time.time() - dog_found_time) > T:
+            out.release()
+            return "Abandoned"
+
+    out.release()
+    return "Not Abandoned"
+
+# usage
+video_path = '/content/drive/MyDrive/dog_vid.mp4'
+output_video_name = 'detected_output_video.mp4'  # Specify the name for the output video here
+T = 30  # Time frame in seconds
+frames, frame_width, frame_height, fps = preprocess_video(video_path)
+classification = track_and_classify(frames, output_video_name, frame_width, frame_height, fps, T)
+print(f"Dog classification: {classification}")
+
