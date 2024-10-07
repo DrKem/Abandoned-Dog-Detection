@@ -1,0 +1,129 @@
+# Check if GPU is enabled
+!nvidia-smi
+
+# Connect to google drive
+
+from google.colab import drive
+drive.mount('/content/drive')
+
+# Install required phython packages
+#-----------------------------------
+
+#!python -m pip install --upgrade pip
+
+#!pip install tensorflow==2.3.1
+
+#!pip install torch
+
+import torch
+import os
+from IPython.display import Image
+
+# Download yolov5 from Github
+
+#!git clone https://github.com/ultralytics/yolov5
+
+# Commented out IPython magic to ensure Python compatibility.
+# %cd /content/drive/MyDrive/abandoned_dog_yoloV5/abandoned_dog/yolov5
+
+#install yolov5 requirements
+
+!pip install -r /content/drive/MyDrive/abandoned_dog_yoloV5/abandoned_dog/yolov5/requirements.txt
+
+"""# Create .yaml file
+
+### move the dataset’s .yaml file to the /content/yolov5/data directory.
+### This file contains information required by YOLO to train the model on the custom data.
+
+## Training
+"""
+
+#training YOLO on custom dataset
+!python train.py --img 416 --batch 16 --epochs 200 --data /content/drive/MyDrive/abandoned_dog_yoloV5/abandoned_dog/yolov5/data/dataset.yaml --weights yolov5s.pt --cache
+
+"""## Detection"""
+
+!python detect.py --source /content/drive/MyDrive/abandoned_dog_yoloV5/abandoned_dog/data/test/dog_vid.mp4 --weights /content/drive/MyDrive/abandoned_dog_yoloV5/abandoned_dog/yolov5/runs/train/exp4/weights/best.pt --data /content/drive/MyDrive/abandoned_dog_yoloV5/abandoned_dog/yolov5/data/dataset.yaml --img 416 --save-txt
+
+paths = []
+
+d = "/content/drive/MyDrive/abandoned_dog_yoloV5/abandoned_dog/yolov5/runs/detect/exp2/labels"
+for path in os.listdir(d):
+    full_path = os.path.join(d, path)
+    if os.path.isfile(full_path):
+         paths.append(full_path)
+
+predictions = []
+
+for txt in paths:
+  f = open(txt, 'r')
+  data = f.read()
+  predictions.append(int(data[0]))
+  os.remove(txt)
+  f.close
+os.rmdir(d)
+print(predictions)
+
+not_abandoned = predictions.count(1)/len(predictions) * 100
+abandoned = predictions.count(0)/len(predictions) * 100
+
+if not_abandoned > 80.0:
+  print('Dog is not abandoned')
+
+elif abandoned > 80.0:
+  print('WARNING!!! ABANDONED DOG!!!')
+
+import cv2
+from google.colab.patches import cv2_imshow
+
+video_capture = cv2.VideoCapture('/content/drive/MyDrive/abandoned_dog_yoloV5/abandoned_dog/yolov5/runs/detect/exp2/dog_vid.mp4')
+
+while True:
+# Capture frame-by-frame
+  ret, frame = video_capture.read()
+
+  img=cv2_imshow(frame)
+
+  if cv2.waitKey(1) & 0xFF == ord('q'):
+      break
+
+
+
+"""## Exploring the metrics recorded during training"""
+
+Image(filename='/content/drive/MyDrive/abandoned_dog_yoloV5/abandoned_dog/yolov5/runs/train/exp4/confusion_matrix.png', width=1000)
+
+"""## Exploring accuracy and model confidence."""
+
+Image(filename='/content/drive/MyDrive/abandoned_dog_yoloV5/abandoned_dog/yolov5/runs/train/exp4/val_batch0_pred.jpg', width=1000)
+
+
+
+"""**Training on Yolov5 and V7**"""
+
+!pip install ultralytics
+
+"""Yolov6"""
+
+from ultralytics import YOLO
+
+# Load a model
+model = YOLO("yolov6n.yaml")  # load a pretrained model (recommended for training)
+
+# Train the model
+
+results = model.train(data="dataset.yaml", epochs=200, imgsz=640, weight_decay=0.0005, dropout=0.5, conf=0.45, iou=0.45, batch=10, verbose=True, name='exp', val=True, save=True, amp = True)
+
+"""**Yolo v8**"""
+
+
+
+from ultralytics import YOLO
+
+# Load a model
+model = YOLO("yolov8n.pt")  # load a pretrained model (recommended for training)
+
+# Train the model
+
+results = model.train(data="dataset.yaml", epochs=100, imgsz=640, weight_decay=0.0005, dropout=0.5, conf=0.45, iou=0.45, batch=10, verbose=True, name='exp', val=True, save=True, amp = True)
+
